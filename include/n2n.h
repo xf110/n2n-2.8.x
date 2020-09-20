@@ -36,7 +36,9 @@
 
 /* Moved here to define _CRT_SECURE_NO_WARNINGS before all the including takes place */
 #ifdef WIN32
-#ifdef _MSC_VER
+#include "win32/n2n_win32.h"
+
+#ifndef CMAKE_BUILD
 #include "config.h" /* Visual C++ */
 #else
 #include "win32/winconfig.h"
