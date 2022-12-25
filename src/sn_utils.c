@@ -465,22 +465,22 @@ static int process_mgmt(n2n_sn_t *sss,
 	traceEvent(TRACE_DEBUG, "process_mgmt");
 
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-	                    "\tid    tun_tap             MAC                edge                   last_seen\n");
+	                    " id  mac                lan_ip              wan_ip                     lseen\n");
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-	                    "-------------------------------------------------------------------------------------\n");
+	                    "---v2------------------------------------------------------------------v2---\n");
 	HASH_ITER(hh, sss->communities, community, tmp) {
 		num_edges += HASH_COUNT(community->edges);
 		ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-		                    "community: %s\n", community->community);
+		                    "%s\n", community->community);
 		sendto_mgmt(sss, sender_sock, (const uint8_t *) resbuf, ressize);
 		ressize = 0;
 
 		num = 0;
 		HASH_ITER(hh, community->edges, peer, tmpPeer) {
 			ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-			                    "\t%-4u  %-18s  %-17s  %-21s  %lu\n",
-			                    ++num, ip_subnet_to_str(ip_bit_str, &peer->dev_addr),
-			                    macaddr_str(mac_buf, peer->mac_addr),
+			                    "\%3u  %-17s  %-18s  %-21s      %1u\n",
+			                    ++num, macaddr_str(mac_buf, peer->mac_addr),
+			                    ip_subnet_to_str(ip_bit_str, &peer->dev_addr),
 			                    sock_to_cstr(sockbuf, &(peer->sock)), now - peer->last_seen);
 
 			sendto_mgmt(sss, sender_sock, (const uint8_t *) resbuf, ressize);
@@ -488,7 +488,7 @@ static int process_mgmt(n2n_sn_t *sss,
 		}
 	}
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-	                    "-------------------------------------------------------------------------------------\n");
+	                    "---v2------------------------------------------------------------------v2---\n");
 
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
 	                    "uptime %lu | ", (now - sss->start_time));
@@ -496,6 +496,10 @@ static int process_mgmt(n2n_sn_t *sss,
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
 	                    "edges %u | ",
 	                    num_edges);
+
+	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
+                        /*"cur_cmnts %u | ", HASH_COUNT(sss->communities));*/
+	                    "cmnts %u | ", HASH_COUNT(sss->communities));
 
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
 	                    "reg_sup %u | ",
@@ -518,14 +522,11 @@ static int process_mgmt(n2n_sn_t *sss,
 	                    (unsigned int) sss->stats.broadcast);
 
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-	                    "cur_cmnts %u\n", HASH_COUNT(sss->communities));
-
-	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-	                    "last fwd  %lu sec ago\n",
+	                    "last_fwd  %lu sec ago | ",
 	                    (long unsigned int) (now - sss->stats.last_fwd));
 
 	ressize += snprintf(resbuf + ressize, N2N_SN_PKTBUF_SIZE - ressize,
-	                    "last reg  %lu sec ago\n\n",
+	                    "last_reg  %lu sec ago\n\n",
 	                    (long unsigned int) (now - sss->stats.last_reg_super));
 
 	sendto_mgmt(sss, sender_sock, (const uint8_t *) resbuf, ressize);

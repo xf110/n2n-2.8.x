@@ -124,6 +124,7 @@ static void help() {
 	printf("-d <net/bit>  | Set an automatically assigned subnet for edge, default -d 172.17.12.0/24\n");
 	printf("-v            | Increase verbosity. Can be used multiple times.\n");
 	printf("-h            | This help message.\n");
+    printf("--------------------- the following parameters are new from v2.8.0 ---------------------\n");
 	printf("\n");
 
 	exit(1);

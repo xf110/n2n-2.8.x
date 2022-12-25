@@ -190,6 +190,8 @@ static void help() {
 
   printf("\nEnvironment variables:\n");
   printf("  N2N_KEY                | Encryption key (ASCII). Not with -k.\n");
+  printf("------------------------------------- the following parameters are new from v2.8.0 ------------------------------------- \n");
+  printf("\n");
 
 #ifdef WIN32
   printf("\nAvailable TAP adapters:\n");
