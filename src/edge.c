@@ -981,9 +981,9 @@ int main(int argc, char* argv[]) {
 #endif
 
   /* Cleanup */
-  edge_term(eee);
   edge_term_conf(&eee->conf);
   tuntap_close(&eee->device);
+  edge_term(eee);
 
   return(rc);
 }

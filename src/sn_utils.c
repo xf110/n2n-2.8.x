@@ -803,10 +803,10 @@ static int process_udp(n2n_sn_t * sss,
 	reg.sock.port = ntohs(sender_sock->sin_port);
 	memcpy(reg.sock.addr.v4, &(sender_sock->sin_addr.s_addr), IPV4_SIZE);
 
-	rec_buf = encbuf;
-
 	/* Re-encode the header. */
-	encode_REGISTER(encbuf, &encx, &cmn2, &reg);
+		encode_REGISTER(encbuf, &encx, &cmn2, &reg);
+
+	rec_buf = encbuf;
       } else {
 	/* Already from a supernode. Nothing to modify, just pass to
 	 * destination. */
