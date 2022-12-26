@@ -139,8 +139,7 @@ static void help() {
   printf("-d <tun device>          | tun device name\n");
 #endif
 
-  printf("-a <mode:address>        | Set interface address. For DHCP use '-r -a dhcp:0.0.0.0'\n"
-         "                         | default(no -a) is autoip, eg. 172.17.12.x\n");
+  printf("-a <mode:address>        | Set interface address. For DHCP use '-r -a dhcp:0.0.0.0'\n");
   printf("-c <community>           | n2n community name the edge belongs to.\n");
   printf("-k <encrypt key>         | Encryption key (ASCII) - also N2N_KEY=<encrypt key>.\n");
   printf("-s <netmask>             | Edge interface netmask in dotted decimal notation (255.255.255.0).\n");
@@ -191,6 +190,8 @@ static void help() {
   printf("\nEnvironment variables:\n");
   printf("  N2N_KEY                | Encryption key (ASCII). Not with -k.\n");
   printf("------------------------------------- the following parameters are new from v2.8.0 ------------------------------------- \n");
+  printf("-a <mode:address>        | Set interface address. For DHCP use '-r -a dhcp:0.0.0.0'\n"
+         "                         | default(no -a) is autoip, eg. 172.17.12.x\n");
   printf("\n");
 
 #ifdef WIN32

@@ -107,7 +107,7 @@ static void help() {
 	printf("[-u <uid> -g <gid>] ");
 #endif /* ifndef WIN32 */
 	printf("[-t <mgmt port>] ");
-	printf("[-d <net/bit>] ");
+	printf("[-a <net/bit>] ");
 	printf("[-v] ");
 	printf("\n\n");
 
@@ -121,10 +121,10 @@ static void help() {
 	printf("-g <GID>      | Group ID (numeric) to use when privileges are dropped.\n");
 #endif /* ifndef WIN32 */
 	printf("-t <port>     | Management UDP Port (for multiple supernodes on a machine).\n");
-	printf("-d <net/bit>  | Set an automatically assigned subnet for edge, default -d 172.17.12.0/24\n");
 	printf("-v            | Increase verbosity. Can be used multiple times.\n");
 	printf("-h            | This help message.\n");
     printf("--------------------- the following parameters are new from v2.8.0 ---------------------\n");
+	printf("-a <net/bit>  | Set an automatically assigned subnet for edge, default -a 172.17.12.0/24\n");
 	printf("\n");
 
 	exit(1);
@@ -145,7 +145,7 @@ static int setOption(int optkey, char *_optarg, n2n_sn_t *sss) {
 			sss->mport = atoi(_optarg);
 			break;
 
-		case 'd': {
+		case 'a': {
 			dec_ip_str_t ip_str = {'\0'};
 			in_addr_t net;
 			uint8_t bitlen;
@@ -220,7 +220,7 @@ static const struct option long_options[] = {
 		{"foreground",  no_argument,       NULL, 'f'},
 		{"local-port",  required_argument, NULL, 'l'},
 		{"mgmt-port",   required_argument, NULL, 't'},
-		{"dhcp",        required_argument, NULL, 'd'},
+		{"dhcp",        required_argument, NULL, 'a'},
 		{"help",        no_argument,       NULL, 'h'},
 		{"verbose",     no_argument,       NULL, 'v'},
 		{NULL, 0,                          NULL, 0}
@@ -232,7 +232,7 @@ static const struct option long_options[] = {
 static int loadFromCLI(int argc, char * const argv[], n2n_sn_t *sss) {
   u_char c;
 
-  while((c = getopt_long(argc, argv, "fl:u:g:t:d:c:vh",
+  while((c = getopt_long(argc, argv, "fl:u:g:t:a:c:vh",
 			 long_options, NULL)) != '?') {
     if(c == 255) break;
     setOption(c, optarg, sss);
