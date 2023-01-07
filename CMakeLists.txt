@@ -87,6 +87,7 @@ if(DEFINED WIN32)
 #  LINK_DIRECTORIES("D:/Program Files/MinGW/opt/lib/" "D:/Program Files/MinGW/x86_64-w64-mingw32/lib/")
 endif(DEFINED WIN32)
 
+file(GLOB_RECURSE LFDS_ALL_SRC "src/lfds711/*.c")
 
 #aux_source_directory(./src N2N_DIR_SRCS)
 #add_library(n2n STATIC ${N2N_DIR_SRCS})
@@ -110,7 +111,7 @@ add_library(n2n STATIC
         src/tuntap_netbsd.c
         src/tuntap_linux.c
         src/tuntap_osx.c
-        )
+        "${LFDS_ALL_SRC}")
 
 if(DEFINED WIN32)
   add_library(edge_utils_win32 src/edge_utils_win32.c)
@@ -123,6 +124,7 @@ if(N2N_OPTION_AES)
   target_link_libraries(n2n ${OPENSSL_LIBRARIES})
 endif(N2N_OPTION_AES)
 
+target_link_libraries(n2n pthread dl)
 
 add_executable(edge src/edge.c)
 target_link_libraries(edge n2n)

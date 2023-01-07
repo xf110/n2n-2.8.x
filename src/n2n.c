@@ -121,24 +121,33 @@ void traceEvent(int eventTraceLevel, char* file, int line, char * format, ...) {
     va_end(va_ap);
 
     if(eventTraceLevel == 0 /* TRACE_ERROR */)
-      extra_msg = "ERROR: ";
+      extra_msg = "[ERROR] ";
     else if(eventTraceLevel == 1 /* TRACE_WARNING */)
-      extra_msg = "WARNING: ";
+      extra_msg = "[WARNING] ";
+    else if(eventTraceLevel == 2)
+        extra_msg = "[NORMAL] ";
+    else if(eventTraceLevel == 3)
+        extra_msg = "[INFO] ";
+    else if(eventTraceLevel == 4)
+        extra_msg = "[DEBUG] ";
 
     while(buf[strlen(buf)-1] == '\n') buf[strlen(buf)-1] = '\0';
 
 #ifndef WIN32
+    char tname[32] = {0};
+    prctl(PR_GET_NAME, tname);
+
     if(useSyslog) {
       if(!syslog_opened) {
         openlog("n2n", LOG_PID, LOG_DAEMON);
         syslog_opened = 1;
       }
 
-      snprintf(out_buf, sizeof(out_buf), "%s%s", extra_msg, buf);
+      snprintf(out_buf, sizeof(out_buf), "[%s]%s%s", tname, extra_msg, buf);
       syslog(LOG_INFO, "%s", out_buf);
     } else {
 		for(i=strlen(file)-1; i>0; i--) if(file[i] == '/') { i++; break; };
-		snprintf(out_buf, sizeof(out_buf), "%s [%s:%d] %s%s", theDate, &file[i], line, extra_msg, buf);
+		snprintf(out_buf, sizeof(out_buf), "%s [%s:%d] [%s]%s%s", theDate, &file[i], line, tname, extra_msg, buf);
       fprintf(traceFile, "%s\n", out_buf);
       fflush(traceFile);
     }

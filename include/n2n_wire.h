@@ -36,6 +36,8 @@
 #define N2N_MULTICAST_PORT              1968
 #define N2N_MULTICAST_GROUP             "224.0.0.68"
 
+#define N2N_PKT_INPUT_QUEUE_SIZE        1024    /* must be the pow of 2 */
+
 typedef uint8_t n2n_community_t[N2N_COMMUNITY_SIZE];
 typedef uint8_t n2n_mac_t[N2N_MAC_SIZE];
 typedef uint8_t n2n_cookie_t[N2N_COOKIE_SIZE];

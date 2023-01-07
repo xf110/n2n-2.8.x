@@ -41,6 +41,9 @@ static cap_value_t cap_values[] = {
 int num_cap = sizeof(cap_values)/sizeof(cap_value_t);
 #endif
 
+extern struct lfds711_queue_bmm_element qbmme[N2N_PKT_INPUT_QUEUE_SIZE];
+extern struct lfds711_queue_bmm_state   qbmms;
+
 /* ***************************************************** */
 
 /** Find the address and IP mode for the tuntap device.
@@ -787,7 +790,89 @@ BOOL WINAPI term_handler(DWORD sig)
 }
 #endif /* defined(__linux__) || defined(WIN32) */
 
+void set_thread_name() {
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    static int counter = 0;
+    char tname[32] = {0};
+
+    pthread_mutex_lock(&mutex);
+
+    if(!counter)
+        strcpy(tname, "main");
+    else
+        snprintf(tname, sizeof(tname), "worker-%d", counter);
+
+    prctl(PR_SET_NAME, tname);
+    counter++;
+    pthread_mutex_unlock(&mutex);
+}
+
+
 /* *************************************************** */
+void *worker_entry(void *arg) {
+    n2n_edge_t *eee = (n2n_edge_t *)arg;
+
+    assert(eee != NULL);
+
+    set_thread_name();
+
+    int s,sig;
+    for (;;) {
+        s = sigwait(&eee->set, &sig);
+        if (s != 0) {
+            traceEvent(TRACE_WARNING, "sigwait returns %d", s);
+            continue;
+        }
+
+        if (sig == SIGUSR1) {
+            pkt_node_t *pkt;
+            while (1 == lfds711_queue_bmm_dequeue( &qbmms, NULL, (void **)&pkt )) {
+                assert(pkt != NULL);
+
+                if (pkt->pkt_type == PKT_TYPE_SOCKET) {
+                    edge_proc_socket(eee, pkt);
+                    free(pkt->buf);
+                    free(pkt);
+                } else if (pkt->pkt_type == PKT_TYPE_TUNTAP) {
+                    edge_proc_tap(eee, pkt);
+                    free(pkt->buf);
+                    free(pkt);
+                } else {
+                    assert(0);
+                }
+            }
+        } else {
+            traceEvent(TRACE_WARNING, "Invalid signal received by worker : %d", sig);
+        }
+    }
+}
+
+int start_worker_threads(n2n_edge_t *eee) {
+    sigemptyset(&eee->set);
+    sigaddset(&eee->set, SIGUSR1);
+
+    int res = pthread_sigmask(SIG_BLOCK, &eee->set, NULL);
+    if( res != 0 )
+        return -1;
+
+    eee->threads_num = sysconf(_SC_NPROCESSORS_ONLN);
+    if (eee->threads_num < 1)
+        return -1;
+
+    traceEvent(TRACE_NORMAL, "CPU core number is %d", eee->threads_num);
+
+    eee->threads = (pthread_t *)malloc(sizeof(pthread_t) * eee->threads_num);
+    if (!eee->threads)
+        return -1;
+
+    int i;
+    for (i = 0; i < eee->threads_num; i++) {
+        if (0 != pthread_create(eee->threads + i, NULL, worker_entry, eee))
+            return -1;
+    }
+
+    return 0;
+}
 
 /** Entry point to program from kernel. */
 int main(int argc, char* argv[]) {
@@ -966,6 +1051,12 @@ int main(int argc, char* argv[]) {
 #endif
 
   keep_on_running = 1;
+
+  set_thread_name();
+
+  if(0 > start_worker_threads(eee))
+      exit(1);
+
   traceEvent(TRACE_NORMAL, "edge started");
   rc = run_edge_loop(eee, &keep_on_running);
   print_edge_stats(eee);

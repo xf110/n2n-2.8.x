@@ -154,6 +154,7 @@ typedef struct ether_hdr ether_hdr_t;
 #include <sys/stat.h>
 #else
 #include <pwd.h>
+#include "sys/prctl.h"
 #endif /* #ifdef WIN32 */
 
 #include "n2n_wire.h"
@@ -168,6 +169,8 @@ typedef struct ether_hdr ether_hdr_t;
 #else
 #define N2N_IFNAMSIZ            16 /* 15 chars * NULL */
 #endif
+
+#include "liblfds711.h"
 
 #ifndef WIN32
 typedef struct tuntap_dev {
@@ -273,6 +276,31 @@ typedef struct n2n_tuntap_priv_config {
 
 /* *************************************************** */
 
+#define PKT_TYPE_SOCKET  0
+#define PKT_TYPE_TUNTAP  1
+
+typedef struct pkt_node {
+    uint16_t   counter;         // counter used to identify all packets
+    uint8_t    pkt_type;        // packet from socket or tuntap
+    uint8_t   *buf;             // packet buffer
+    ssize_t    len;             // packet length
+    n2n_sock_t sender;          // socket info of sender
+} pkt_node_t;
+
+#define RESULT_OP_NULL 0
+#define RESULT_OP_SEND 1
+#define RESULT_OP_TRANS_TO_TUNTAP 2
+#define RESULT_OP_PROGRAM_EXIT 3
+#define RESULT_OP_MAX 4
+
+typedef struct result_node {
+    uint8_t             op;          // operation which should be carried out
+    uint8_t            *buf;         // packet buffer (if should be sent)
+    size_t              len;         // packet length
+    int                 fd;          // file descriptor (socket or tuntap fd)
+    n2n_sock_t          dest;        // packet destination (if a network packet which should be sent)
+    struct result_node *next;
+} result_node_t;
 
 typedef struct n2n_edge_conf {
 	n2n_sn_name_t       sn_ip_array[N2N_EDGE_NUM_SUPERNODES];
@@ -335,6 +363,7 @@ struct n2n_edge {
 #endif
 
 	/* Peers */
+    pthread_rwlock_t    peers_rwlock;
 	struct peer_info *  known_peers;             /**< Edges we are connected to. */
 	struct peer_info *  pending_peers;           /**< Edges we have tried to register with. */
 
@@ -348,8 +377,14 @@ struct n2n_edge {
 	struct n2n_edge_stats stats;                 /**< Statistics */
 
 	n2n_tuntap_priv_config_t tuntap_priv_conf;   /**< Tuntap config */
-};
 
+    uint16_t            packet_counter;          /**< Counter for packet from network and tuntap. */
+
+    pthread_t          *threads;
+    int                 threads_num;
+    unsigned int        thread_count;
+    sigset_t            set;
+};
 
 typedef struct sn_stats
 {
@@ -481,7 +516,8 @@ void edge_set_callbacks(n2n_edge_t *eee, const n2n_edge_callbacks_t *callbacks);
 void edge_set_userdata(n2n_edge_t *eee, void *user_data);
 void* edge_get_userdata(n2n_edge_t *eee);
 void edge_send_packet2net(n2n_edge_t *eee, uint8_t *tap_pkt, size_t len);
-void edge_read_from_tap(n2n_edge_t *eee);
+void edge_proc_tap(n2n_edge_t *eee, pkt_node_t *pkt_node);
+void edge_proc_socket(n2n_edge_t * eee, pkt_node_t *pkt);
 int edge_get_n2n_socket(n2n_edge_t *eee);
 int edge_get_management_socket(n2n_edge_t *eee);
 int run_edge_loop(n2n_edge_t *eee, int *keep_running);
