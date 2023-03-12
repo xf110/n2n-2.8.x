@@ -158,7 +158,7 @@ static void help() {
   printf("-t <mgmt port>           | Management UDP Port. It can be set when you run multiple edges on a machine (default = %d)\n", N2N_EDGE_MGMT_PORT);
   printf("Environment variables:\n");
   printf("  N2N_KEY                | Encryption key (ASCII). Not with -k\n");
-  printf("------------------------------- the following parameters are new from ntop's v2.8.0 by cnn2n -------------------------------\n");
+  printf("---------------------- new features from ntop's n2n_v2.8.0 (by github.com/lucktu/cnn2n 2.8.x-pthread) ----------------------\n");
   printf("-a <mode:address>        | + Default(no -a ...) = autoip, eg. 172.17.12.x\n");
   printf("\n");
   printf("Recommended: -A4(A4>A5>A3>A2), -M 1386, -E\n");
