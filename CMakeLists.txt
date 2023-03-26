@@ -32,7 +32,6 @@ add_definitions(-DCMAKE_BUILD)
 add_definitions(-DGIT_RELEASE="${N2N_VERSION}" -DPACKAGE_VERSION="${N2N_VERSION}" -DPACKAGE_OSNAME="${N2N_OSNAME}")
 add_definitions(-DN2N_VERSION="${N2N_VERSION}" -DN2N_OSNAME="${N2N_OSNAME}")
 
-
 # Build information
 OPTION(BUILD_SHARED_LIBS "BUILD Shared Library" OFF)
 
@@ -87,7 +86,7 @@ if(DEFINED WIN32)
 #  LINK_DIRECTORIES("D:/Program Files/MinGW/opt/lib/" "D:/Program Files/MinGW/x86_64-w64-mingw32/lib/")
 endif(DEFINED WIN32)
 
-file(GLOB_RECURSE LFDS_ALL_SRC "src/lfds711/*.c")
+file(GLOB_RECURSE LFDS_ALL_SRC "thirdparty/liblfds711/src/*.c")
 
 #aux_source_directory(./src N2N_DIR_SRCS)
 #add_library(n2n STATIC ${N2N_DIR_SRCS})

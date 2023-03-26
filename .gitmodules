@@ -1,0 +1,3 @@
+[submodule "liblfds711"]
+	path = thirdparty/liblfds711
+	url = https://github.com/bin/liblfds_711.git
