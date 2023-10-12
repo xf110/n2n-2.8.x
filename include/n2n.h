@@ -443,14 +443,7 @@ typedef struct n2n_sn {
 
 /* Transop Init Functions */
 int n2n_transop_null_init(const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
-int n2n_transop_twofish_init(const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
-#ifdef N2N_HAVE_AES
-int n2n_transop_aes_cbc_init(const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
-#endif
-#ifdef HAVE_OPENSSL_1_1
-int n2n_transop_cc20_init(const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
-#endif
-int n2n_transop_speck_init(const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
+
 
 /* Log */
 void setTraceLevel(int level);
