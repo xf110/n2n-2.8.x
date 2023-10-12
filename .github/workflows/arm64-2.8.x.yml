@@ -128,4 +128,4 @@ jobs:
         with:
          name: n2n-arm64
          path: |
-           /opt/n2n-2.8.x-pthread-aarch64-${tagtime}.zip
+           /opt/n2n-2.8.x-pthread-aarch64-${{ env.tagtime }}.zip
