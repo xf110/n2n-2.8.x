@@ -104,10 +104,6 @@ int edge_get_management_socket(n2n_edge_t *eee) {
 const char* transop_str(enum n2n_transform tr) {
   switch(tr) {
   case N2N_TRANSFORM_ID_NULL:    return("null");
-  case N2N_TRANSFORM_ID_TWOFISH: return("twofish");
-  case N2N_TRANSFORM_ID_AESCBC:  return("AES-CBC");
-  case N2N_TRANSFORM_ID_CHACHA20:return("ChaCha20");
-  case N2N_TRANSFORM_ID_SPECK   :return("Speck");
   default:                       return("invalid");
   };
 }
@@ -221,22 +217,7 @@ n2n_edge_t* edge_init(const n2n_edge_conf_t *conf, int *rv) {
 
   /* Set active transop */
   switch(transop_id) {
-  case N2N_TRANSFORM_ID_TWOFISH:
-    rc = n2n_transop_twofish_init(&eee->conf, &eee->transop);
-    break;
-#ifdef N2N_HAVE_AES
-  case N2N_TRANSFORM_ID_AESCBC:
-    rc = n2n_transop_aes_cbc_init(&eee->conf, &eee->transop);
-    break;
-#endif
-#ifdef HAVE_OPENSSL_1_1
-  case N2N_TRANSFORM_ID_CHACHA20:
-    rc = n2n_transop_cc20_init(&eee->conf, &eee->transop);
-    break;
-#endif
-  case N2N_TRANSFORM_ID_SPECK:
-    rc = n2n_transop_speck_init(&eee->conf, &eee->transop);
-    break;
+  
   default:
     rc = n2n_transop_null_init(&eee->conf, &eee->transop);
   }
@@ -3198,7 +3179,7 @@ int quick_edge_init(char *device_name, char *community_name,
   /* Setup the configuration */
   edge_init_conf_defaults(&conf);
   conf.encrypt_key = encrypt_key;
-  conf.transop_id = N2N_TRANSFORM_ID_TWOFISH;
+
   conf.compression = N2N_COMPRESSION_ID_NONE;
   snprintf((char*)conf.community_name, sizeof(conf.community_name), "%s", community_name);
   edge_conf_add_supernode(&conf, supernode_ip_address_port);
