@@ -211,30 +211,7 @@ static void setPayloadEncryption( n2n_edge_conf_t *conf, int cipher) {
       conf->transop_id = N2N_TRANSFORM_ID_NULL;
       break;
     }
-  case 2:
-    {
-      conf->transop_id = N2N_TRANSFORM_ID_TWOFISH;
-      break;
-    }
-#ifdef N2N_HAVE_AES
-  case 3:
-    {
-      conf->transop_id = N2N_TRANSFORM_ID_AESCBC;
-      break;
-    }
-#endif
-#ifdef HAVE_OPENSSL_1_1
-  case 4:
-    {
-      conf->transop_id = N2N_TRANSFORM_ID_CHACHA20;
-      break;
-    }
-#endif
-  case 5:
-    {
-      conf->transop_id = N2N_TRANSFORM_ID_SPECK;
-      break;
-    }
+ 
   default:
     {
       conf->transop_id = N2N_TRANSFORM_ID_INVAL;
