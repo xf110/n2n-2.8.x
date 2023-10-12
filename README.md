@@ -1,3 +1,9 @@
+
+
+fork https://github.com/lucktu/cnn2n/tree/2.8.x-pthread
+
+
+
 本项目是在[n2n官方v2.8.0](https://github.com/ntop/n2n/tree/2.8-stable)的基础上做了一些修改，便于QQ群(196588661 + 256572040)内的网友使用，以下仅记录修改/增加的部分：
 
 1. 2022-12-25：v2.8.1 版，增加 auto ip 功能；
