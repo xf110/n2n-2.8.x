@@ -1,0 +1,131 @@
+name: 编译arm64-2.8.x
+
+on:
+  #schedule:
+    #- cron: '0 3,20 * * *'
+  workflow_dispatch:
+env:
+  TZ: Asia/Shanghai
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Install cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install \
+            binutils-aarch64-linux-gnu \
+            gcc-aarch64-linux-gnu
+      - 
+        name: 克隆源码
+        shell: bash
+        run: |
+          git clone https://github.com/lmq8267/n2n-2.8.x /opt/n2n
+          rm -rf /opt/n2n/thirdparty/liblfds711
+          git clone https://github.com/bin/liblfds_711.git /opt/n2n/thirdparty/liblfds711
+          mkdir -p /opt/ssl 
+      - 
+        name: 构建openssl
+        shell: bash
+        run: |
+          wget -c http://www.zlib.net/zlib-1.3.tar.gz -P /opt/ssl/
+          tar zxf /opt/ssl/zlib-1.3.tar.gz -C /opt/ssl/
+          cd /opt/ssl/zlib-1.3
+          CC=aarch64-linux-gnu-gcc \
+          LDFLAGS="-L/usr/aarch64-linux-gnu/lib -Wl,--gc-sections" \
+          CFLAGS="-I /usr/aarch64-linux-gnu/include -Os -ffunction-sections -fdata-sections -march=armv8-a -mabi=lp64 -D_GNU_SOURCE -D_BSD_SOURCE -fPIE" \
+          CPPFLAGS="-I /usr/aarch64-linux-gnu/include" \
+          CXXFLAGS="-I /usr/aarch64-linux-gnu/include -Os -ffunction-sections -fdata-sections -march=armv8-a -mabi=lp64 -D_GNU_SOURCE -D_BSD_SOURCE -fPIE" \
+          CROSS_PREFIX="aarch64-linux-gnu-" \
+          ./configure \
+          --prefix=/opt \
+          --static
+          make -j$(nproc)
+          make install
+          sudo mkdir -p /usr/aarch64-linux-gnu/lib/pkgconfig
+          sudo mkdir -p /usr/aarch64-linux-gnu/share/man/man3
+          sudo cp -f /opt/lib/libz.a /usr/aarch64-linux-gnu/lib/libz.a
+          sudo cp -f /opt/lib/pkgconfig/zlib.pc /usr/aarch64-linux-gnu/lib/pkgconfig/zlib.pc
+          sudo cp -f /opt/include/zlib.h /usr/aarch64-linux-gnu/include/zlib.h
+          sudo cp -f /opt/include/zconf.h /usr/aarch64-linux-gnu/include/zconf.h
+          sudo cp -f /opt/share/man/man3/zlib.3 /usr/aarch64-linux-gnu/share/man/man3/zlib.3
+          wget -c https://www.openssl.org/source/openssl-1.1.1w.tar.gz -P /opt/ssl/
+          tar zxf /opt/ssl/openssl-1.1.1w.tar.gz -C /opt/ssl/
+          wget -c http://mirrors.xmu.edu.cn/gentoo/distfiles/c8/cryptodev-linux-1.12.tar.gz -P /opt/ssl/
+          tar zxf /opt/ssl/cryptodev-linux-1.12.tar.gz -C /opt/ssl/
+          sudo cp -f /opt/ssl/cryptodev-linux-cryptodev-linux-1.12/crypto/cryptodev.h /usr/aarch64-linux-gnu/include/cryptodev.h
+          cd /opt/ssl/openssl-1.1.1w
+          CC=aarch64-linux-gnu-gcc \
+          ./Configure linux-aarch64 -static --prefix=/opt zlib enable-rc5 enable-ssl3 enable-ssl3-method enable-tls1_3 --with-zlib-lib=/usr/aarch64-linux-gnu/lib --with-zlib-include=/usr/aarch64-linux-gnu/include -DOPENSSL_PREFER_CHACHA_OVER_GCM enable-weak-ssl-ciphers no-ssl2 no-gost no-heartbeats no-err no-unit-test no-aria no-sm2 no-sm3 no-sm4 no-tests no-shared no-afalgeng no-async \
+          --cross-compile-prefix=' '
+          make -j$(nproc)
+          make install INSTALLTOP=/opt OPENSSLDIR=/opt
+          sudo cp -f /opt/bin/openssl /usr/aarch64-linux-gnu/bin/openssl
+          sudo cp -rf /opt/include/openssl/ /usr/aarch64-linux-gnu/include/openssl/
+          sudo cp -f /opt/lib/libcrypto.a /usr/aarch64-linux-gnu/lib/libcrypto.a
+          sudo cp -f /opt/lib/libssl.a /usr/aarch64-linux-gnu/lib/libssl.a
+      - 
+        name: 编译n2n
+        shell: bash
+        run: |
+          cd /opt/n2n
+          sed -i 's|-Wshadow|-Wshadow -static |g' ./CMakeLists.txt
+          sed -i '/# N2n release information/i set(CMAKE_SYSTEM_NAME Linux)' ./CMakeLists.txt
+          sed -i '/# N2n release information/i set(CMAKE_SYSTEM_PROCESSOR aarch64)' ./CMakeLists.txt
+          sed -i '/# N2n release information/i set(CMAKE_C_COMPILER /usr/bin/aarch64-linux-gnu-gcc)' ./CMakeLists.txt
+          sed -i '/# N2n release information/i set(CMAKE_CXX_COMPILER /usr/bin/aarch64-linux-gnu-g++)' ./CMakeLists.txt
+          sed -i '/# N2n release information/i set(CMAKE_CXX_FLAGS "${CMAKE_CXX_LINKER_FLAGS} -static")' ./CMakeLists.txt
+          sed -i '/# N2n release information/i set(CMAKE_CXE_LINKER_FLAGS "${CMAKE_CEXE_LINKER_FLAGS} -static")' ./CMakeLists.txt
+          cmake . .
+          make
+        continue-on-error: true
+      - 
+        name: 剥离压缩
+        run: |
+          mkdir -p /opt/arm64/upx
+          git clone https://github.com/lmq8267/cloudflared.git /opt/st
+          tar -xvf /opt/st/upx-4.1.0-amd64_linux.tar.xz -C /opt
+          chmod 777 /opt/upx-4.1.0-amd64_linux/upx
+          cd /opt/n2n
+          file edge
+          cp -rf /opt/n2n/edge /opt/arm64/edge
+          cp -rf /opt/n2n/example_edge_embed /opt/arm64/example_edge_embed
+          cp -rf /opt/n2n/example_edge_embed_quick_edge_init /opt/arm64/example_edge_embed_quick_edge_init
+          cp -rf /opt/n2n/example_sn_embed /opt/arm64/example_sn_embed
+          cp -rf /opt/n2n/supernode /opt/arm64/supernode
+          [ -f /opt/n2n/n2n-benchmark ] && cp -rf n2n-benchmark /opt/arm64/n2n-benchmark
+          cp -rf /opt/n2n/edge /opt/arm64/upx/edge
+          cp -rf /opt/n2n/example_edge_embed /opt/arm64/upx/example_edge_embed
+          cp -rf /opt/n2n/example_edge_embed_quick_edge_init /opt/arm64/upx/example_edge_embed_quick_edge_init
+          cp -rf /opt/n2n/example_sn_embed /opt/arm64/upx/example_sn_embed
+          cp -rf /opt/n2n/supernode /opt/arm64/upx/supernode
+          [ -f /opt/n2n/n2n-benchmark ] && cp -rf n2n-benchmark /opt/arm64/upx/n2n-benchmark
+          cd /opt/arm64/upx
+          /usr/bin/aarch64-linux-gnu-strip edge
+          /usr/bin/aarch64-linux-gnu-strip example_edge_embed
+          /usr/bin/aarch64-linux-gnu-strip example_edge_embed_quick_edge_init
+          /usr/bin/aarch64-linux-gnu-strip example_sn_embed
+          /usr/bin/aarch64-linux-gnu-strip supernode
+          [ -f /opt/n2n/n2n-benchmark ] && /usr/bin/aarch64-linux-gnu-strip n2n-benchmark
+          /opt/upx-4.1.0-amd64_linux/upx edge
+          /opt/upx-4.1.0-amd64_linux/upx example_edge_embed
+          /opt/upx-4.1.0-amd64_linux/upx example_edge_embed_quick_edge_init
+          /opt/upx-4.1.0-amd64_linux/upx example_sn_embed
+          /opt/upx-4.1.0-amd64_linux/upx supernode
+          [ -f /opt/n2n/n2n-benchmark ] && /opt/upx-4.1.0-amd64_linux/upx n2n-benchmark
+          cd /opt
+          tagtime=$(date '+%Y-%m-%d')
+          echo "tagtime=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
+          zip -r n2n-2.8.x-pthread-aarch64-${tagtime}.zip arm64
+          echo "build_time=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+      - name : 上传
+        uses: actions/upload-artifact@master
+        if: always()
+        with:
+         name: n2n-arm64
+         path: |
+           /opt/n2n-2.8.x-pthread-aarch64-${tagtime}.zip
