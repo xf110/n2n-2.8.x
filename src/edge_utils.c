@@ -3123,7 +3123,9 @@ void edge_init_conf_defaults(n2n_edge_conf_t *conf) {
 
 	conf->local_port = 0 /* any port */;
 	conf->mgmt_port = N2N_EDGE_MGMT_PORT; /* 5644 by default */
-	
+	conf->transop_id = N2N_TRANSFORM_ID_NULL;
+	conf->header_encryption = HEADER_ENCRYPTION_NONE;
+	conf->compression = N2N_COMPRESSION_ID_NONE;
 	conf->drop_multicast = 1;
 	conf->allow_p2p = 1;
 	conf->disable_pmtu_discovery = 1;
