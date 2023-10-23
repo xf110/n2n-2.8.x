@@ -18,7 +18,7 @@ N2N_LIBS=
 AC_PROG_CC
 AC_CHECK_LIB([zstd], [ZSTD_compress])
 
-if test "x$ac_cv_lib_zstd_ZSTD_compress" != xyes; then
+if test "x$ac_cv_lib_zstd_ZSTD_compress" = xyes; then
   AC_MSG_RESULT(Building n2n without ZSTD support)
 else
   AC_DEFINE([N2N_HAVE_ZSTD], [], [Have ZSTD support])
