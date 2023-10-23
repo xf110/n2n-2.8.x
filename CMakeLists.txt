@@ -33,7 +33,7 @@ add_definitions(-DGIT_RELEASE="${N2N_VERSION}" -DPACKAGE_VERSION="${N2N_VERSION}
 add_definitions(-DN2N_VERSION="${N2N_VERSION}" -DN2N_OSNAME="${N2N_OSNAME}")
 
 # Build information
-OPTION(BUILD_SHARED_LIBS "BUILD Shared Library" OFF)
+OPTION(BUILD_SHARED_LIBS "BUILD Shared Library" ON)
 
 # N2n specific params
 OPTION(N2N_OPTION_AES "USE AES" ON)
