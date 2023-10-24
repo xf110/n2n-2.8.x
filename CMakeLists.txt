@@ -101,11 +101,11 @@ add_library(n2n STATIC
         src/transform_tf.c
         src/transform_aes.c
         src/transform_cc20.c
-        src/transform_speck.c
+        
         
         src/random_numbers.c
         src/pearson.c
-        src/header_encryption.c
+        
         src/tuntap_freebsd.c
         src/tuntap_netbsd.c
         src/tuntap_linux.c
