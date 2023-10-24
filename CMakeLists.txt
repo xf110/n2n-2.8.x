@@ -102,7 +102,7 @@ add_library(n2n STATIC
         src/transform_aes.c
         src/transform_cc20.c
         src/transform_speck.c
-        src/speck.c
+        
         src/random_numbers.c
         src/pearson.c
         src/header_encryption.c
