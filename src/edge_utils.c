@@ -328,8 +328,27 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
 
   memcpy(addr, addrIn, N2N_EDGE_SN_HOST_SIZE);
 
-  supernode_host = strtok(addr, ":");
-
+   if (strchr(addr, ':80') != NULL) {
+      supernode_host = strtok(addr, ":");
+    } else {
+  char *location;
+  char command[1024];
+  sprintf(command, "curl -s -I %s | grep -i location | awk '{print $2}'", addr);
+   FILE *fp = popen(command, "r");
+   char buffer[1024];
+    if (fread(buffer, 1, sizeof(buffer), fp) > 0) {
+            location = strtok(buffer, "\r\n");
+        }
+        pclose(fp);
+        if (strncmp(location, "http://", 7) == 0) {
+            location += 7;
+        }
+        char *slash = strchr(location, '/');
+        if (slash != NULL) {
+            *slash = '\0';
+        }
+  supernode_host = strtok(location, ":");
+    }
   if(supernode_host) {
     in_addr_t sn_addr;
     char *supernode_port = strtok(NULL, ":");
