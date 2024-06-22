@@ -34,4 +34,4 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: n2n-binary
-        path: path/to/compiled/binary  # Replace with the path to your compiled binary or artifact
+        path: supernode  # Replace with the path to your compiled binary or artifact
