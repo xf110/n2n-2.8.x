@@ -24,7 +24,7 @@ jobs:
         docker buildx inspect --bootstrap
         docker buildx build --platform freebsd/amd64 -t n2n-build .
         docker run --rm n2n-build /bin/sh -c 'make'
-
+        working-directory: ${{ github.workspace }
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
