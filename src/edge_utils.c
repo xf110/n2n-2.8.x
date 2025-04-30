@@ -15,9 +15,14 @@
  * along with this program; if not see see <http://www.gnu.org/licenses/>
  *
  */
-
+#include <regex.h> 
+#include <ares.h>    // 引入 c-ares 头文件解析txt记录
 #include "n2n.h"
 #include "edge_utils_win32.h"
+
+// 定义常量，模拟从 ares.h 中引入的常量
+#define ns_c_in 1     // IN class (Internet)
+#define ns_t_txt 16   // TXT record type
 
 /* heap allocation for compression as per lzo example doc */
 #define HEAP_ALLOC(var,size) lzo_align_t __LZO_MMODEL var [ ((size) + (sizeof(lzo_align_t) - 1)) / sizeof(lzo_align_t) ]
@@ -104,6 +109,10 @@ int edge_get_management_socket(n2n_edge_t *eee) {
 const char* transop_str(enum n2n_transform tr) {
   switch(tr) {
   case N2N_TRANSFORM_ID_NULL:    return("null");
+  case N2N_TRANSFORM_ID_TWOFISH: return("twofish");
+  case N2N_TRANSFORM_ID_AESCBC:  return("AES-CBC");
+  case N2N_TRANSFORM_ID_CHACHA20:return("ChaCha20");
+  case N2N_TRANSFORM_ID_SPECK   :return("Speck");
   default:                       return("invalid");
   };
 }
@@ -217,7 +226,22 @@ n2n_edge_t* edge_init(const n2n_edge_conf_t *conf, int *rv) {
 
   /* Set active transop */
   switch(transop_id) {
-  
+  case N2N_TRANSFORM_ID_TWOFISH:
+    rc = n2n_transop_twofish_init(&eee->conf, &eee->transop);
+    break;
+#ifdef N2N_HAVE_AES
+  case N2N_TRANSFORM_ID_AESCBC:
+    rc = n2n_transop_aes_cbc_init(&eee->conf, &eee->transop);
+    break;
+#endif
+#ifdef HAVE_OPENSSL_1_1
+  case N2N_TRANSFORM_ID_CHACHA20:
+    rc = n2n_transop_cc20_init(&eee->conf, &eee->transop);
+    break;
+#endif
+  case N2N_TRANSFORM_ID_SPECK:
+    rc = n2n_transop_speck_init(&eee->conf, &eee->transop);
+    break;
   default:
     rc = n2n_transop_null_init(&eee->conf, &eee->transop);
   }
@@ -321,14 +345,299 @@ static int is_valid_peer_sock(const n2n_sock_t *sock) {
  *  REVISIT: This is a really bad idea. The edge will block completely while the
  *           hostname resolution is performed. This could take 15 seconds.
  */
+// 检查系统是否有指定命令
+int check_command_exists(const char *cmd) {
+    char path[256];
+    snprintf(path, sizeof(path), "/usr/bin/which %s > /dev/null 2>&1", cmd);
+    return (system(path) == 0);
+}
+// 去除字符串开头的 "http://" 或 "https://"
+void strip_http_prefix(char *url) {
+    if (strncmp(url, "http://", 7) == 0) {
+        memmove(url, url + 7, strlen(url + 7) + 1);
+    } else if (strncmp(url, "https://", 8) == 0) {
+        memmove(url, url + 8, strlen(url + 8) + 1);
+    }
+}
+// 辅助函数：找最后一行的起始位置
+char *find_last_line_or_all(const char *buf) {
+    if (!buf) return NULL;
+
+    // 从最后开始找 '\n' 或 '\r'
+    char *last_n = strrchr(buf, '\n');
+    char *last_r = strrchr(buf, '\r');
+    char *p = NULL;
+
+    if (last_n && last_r) {
+        p = (last_n > last_r) ? last_n : last_r; // 谁后面出现就用谁
+    } else if (last_n) {
+        p = last_n;
+    } else if (last_r) {
+        p = last_r;
+    }
+
+    if (p) {
+        return p + 1; // 返回最后一个换行符之后的第一个字符
+    } else {
+        return (char *)buf; // 没有换行，直接返回整个内容
+    }
+}
+// 将字符串 src 安全拷贝到 dst，防止越界，同时保证 dst 以 '\0' 结尾
+static void safe_strncpy(char *dst, const char *src, size_t dst_size) {
+    if (dst_size == 0) return; // 如果目标大小为0，直接返回
+    strncpy(dst, src, dst_size - 1); // 只拷贝 dst_size-1 个字节
+    dst[dst_size - 1] = '\0'; // 手动添加字符串结束符
+}
+/* ############################################################################################################################################################################################################### */
 static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
   n2n_sn_name_t addr;
   const char *supernode_host;
   int rv = 0;
 
   memcpy(addr, addrIn, N2N_EDGE_SN_HOST_SIZE);
+  // 检查地址是否以 "txt:" 开头，如果是，则进行TXT记录解析
+    if (strncmp(addr, "txt:", 4) == 0) {
+        // 只处理txt查询
+        const char *domain = addr + 4; // 跳过 "txt:" 获取真正的域名
+        ares_channel channel;
+        struct ares_options options;
+        int optmask = 0;
+        int status;
 
-   
+        // 初始化c-ares库
+        if ((status = ares_library_init(ARES_LIB_INIT_ALL)) != ARES_SUCCESS) {
+            traceEvent(TRACE_ERROR, "Failed to initialize c-ares: %d", status);
+            return -1;
+        }
+
+        // 初始化c-ares通道
+        if ((status = ares_init_options(&channel, &options, optmask)) != ARES_SUCCESS) {
+            traceEvent(TRACE_ERROR, "Failed to initialize c-ares channel: %d", status);
+            ares_library_cleanup();
+            return -1;
+        }
+
+        // 设置DNS服务器，这里使用公共DNS服务器（腾讯和114和谷歌）
+        const char *servers = "119.29.29.29,114.114.114.114,8.8.8.8";
+        ares_set_servers_csv(channel, servers);
+
+        // 定义查询上下文
+        struct {
+            int done;             // 是否完成标志
+            int success;          // 是否成功标志
+            char txt_record[256]; // 查询到的TXT记录
+        } ctx = {0};
+
+        // 定义TXT查询回调
+        void txt_query_callback(void *arg, int status, int timeouts, unsigned char *abuf, int alen) {
+            if (status == ARES_SUCCESS) {
+                struct ares_txt_reply *txt_out = NULL;
+                if (ares_parse_txt_reply(abuf, alen, &txt_out) == ARES_SUCCESS && txt_out != NULL) {
+                    snprintf(ctx.txt_record, sizeof(ctx.txt_record), "%s", txt_out->txt);
+                    ctx.success = 1; // 成功解析
+                    ares_free_data(txt_out); // 释放返回的数据
+                }
+            }
+            ctx.done = 1; // 查询完成
+        }
+
+        // 发起TXT查询
+        ares_query(channel, domain, ns_c_in, ns_t_txt, txt_query_callback, &ctx);
+        // traceEvent(TRACE_NORMAL, "Initiate TXT query: '%s'", domain);
+
+        // 查询等待处理（select驱动）
+        fd_set read_fds, write_fds;
+        struct timeval *tvp, tv, timeout;
+        int nfds;
+        int max_wait_ms = 3000; // 最大等待3秒
+
+        timeout.tv_sec = max_wait_ms / 1000;
+        timeout.tv_usec = (max_wait_ms % 1000) * 1000;
+
+        while (!ctx.done) {
+            FD_ZERO(&read_fds);
+            FD_ZERO(&write_fds);
+            nfds = ares_fds(channel, &read_fds, &write_fds);
+            if (nfds == 0) {
+                break; // 没有事件可处理
+            }
+
+            tvp = ares_timeout(channel, &timeout, &tv);
+            int res = select(nfds, &read_fds, &write_fds, NULL, tvp);
+            if (res < 0) {
+                traceEvent(TRACE_ERROR, "Select failed, terminating TXT query");
+                break;
+            }
+            ares_process(channel, &read_fds, &write_fds);
+        }
+
+        // 清理c-ares资源
+        ares_destroy(channel);
+        ares_library_cleanup();
+
+        if (ctx.success) {
+            // 成功解析到TXT记录，把结果拷贝回addr
+            snprintf(addr, sizeof(addr), "%s", ctx.txt_record);
+            // traceEvent(TRACE_NORMAL, "TXT record query successful, the address is: %s", addr);
+        } else {
+            // 查询失败，返回错误
+            traceEvent(TRACE_ERROR, "TXT record query failed");
+            return -1;
+        }
+    }
+  // 检查是否以 http 或 https 开头
+ if (strncmp(addr, "http:", 5) == 0 || strncmp(addr, "https:", 6) == 0) {
+ 	char result[8192] = {0};
+        char cmd[1024] = {0};
+        int has_wget = check_command_exists("wget");
+        int has_curl = check_command_exists("curl");
+
+        // 如果没有wget和curl，报错
+        if (!has_wget && !has_curl) {
+            traceEvent(TRACE_ERROR, "The system does not have the wget or curl command and cannot use the redirection feature");
+            return -1;
+        }
+
+	// 检查并修正addr的前缀，补全成http://或https://
+    	if (strncmp(addr, "http:", 5) == 0 && addr[5] != '/') {
+        	snprintf(addr, sizeof(addr), "http://%s", addr + 5);
+    	} else if (strncmp(addr, "https:", 6) == 0 && addr[6] != '/') {
+        	snprintf(addr, sizeof(addr), "https://%s", addr + 6);
+    	} else {
+        	snprintf(addr, sizeof(addr), "%s", addr);
+    	}
+	 
+        // 构造命令，优先使用curl
+        if (has_curl) {
+            snprintf(cmd, sizeof(cmd), "curl -iks --retry 5 --retry-delay 2 '%s' 2>&1", addr);
+        } else if (has_wget) {
+            snprintf(cmd, sizeof(cmd), "(for i in 1 2 3 4 5; do wget --no-check-certificate --server-response -q -O - '%s' && break; sleep 2; done) 2>&1", addr);
+        } 
+
+        FILE *fp = popen(cmd, "r");
+        if (fp == NULL) {
+            traceEvent(TRACE_ERROR, "Unable to execute the command to get the redirection UR");
+            return -1;
+        }
+
+        // 循环读取子进程输出内容
+	size_t total_len = 0;
+	while (!feof(fp) && total_len < sizeof(result) - 1) {
+    		size_t n = fread(result + total_len, 1, sizeof(result) - 1 - total_len, fp);
+    		if (n > 0) {
+       	 		total_len += n;
+    		} else {
+        		break;
+    		}
+	}
+	result[total_len] = '\0'; // 补充字符串结束符
+	pclose(fp); // 关闭子进程
+	// 查找最后一个HTTP头的位置（考虑有重定向情况）
+	char *pos = result;
+	char *last_http = NULL;
+	while (1) {
+    		char *p = strstr(pos, "HTTP/");
+    		if (!p) break; // 没有更多HTTP头了
+    			last_http = p;
+    			pos = p + 5; // 继续往后找
+	}
+
+	// 检查是否找到HTTP头
+	if (last_http == NULL) {
+    		traceEvent(TRACE_ERROR, "No HTTP response headers found");
+    		return -1;
+	}
+        // 分析返回内容，不区分 curl 和 wget
+	int status_code = 0; // 用于保存HTTP状态码
+	char redirect_url[512] = {0}; // 临时缓冲区用于存重定向URL
+	 
+	// 从返回内容中解析HTTP状态码
+	if (sscanf(last_http, "HTTP/1.1 %d", &status_code) != 1 && sscanf(last_http, "HTTP/2 %d", &status_code) != 1) {
+    		traceEvent(TRACE_ERROR, "Unable to parse the HTTP status code");
+    		return -1;
+	}
+	 
+	// 根据状态码进行不同处理
+	if (status_code >= 300 && status_code < 400) {
+    		// 处理 3xx 重定向
+    		char *location = strstr(result, "Location: ");
+    		if (!location) location = strstr(result, "location: "); // 有些服务器小写
+    			if (location) {
+        			location += strlen("Location: ");
+        			while (*location == ' ') location++; // 跳过多余空格
+        			char *end = strchr(location, '\n');
+        			if (end) *end = '\0'; // 截断这一行
+        				strncpy(redirect_url, location, sizeof(redirect_url) - 1);
+					redirect_url[sizeof(redirect_url) - 1] = '\0'; // 保证 redirect_url 以 '\0' 结尾
+        				safe_strncpy(addr, redirect_url, sizeof(addr));
+        				strip_http_prefix(addr); // 去掉http://或https://前缀
+        				// traceEvent(TRACE_NORMAL, "HTTP 3XX Redirect URL detected: %s", addr);
+    			} else {
+        			traceEvent(TRACE_ERROR, "Location header not found");
+        			return -1;
+    			}
+	} else if (status_code == 200) {
+    		// 处理 200 OK，获取正文内容
+    		char *body = NULL;
+    		// 先查找标准的 HTTP 分隔符 \r\n\r\n（一般 curl 的输出符合）
+    		body = strstr(result, "\r\n\r\n");
+
+    		if (!body) {
+        		// 如果找不到标准分隔符，再尝试查找 \r\n\ （wget 有时候是这样的）
+        		body = strstr(result, "\r\n\\");
+        		if (body) {
+            			body += 3; // 跳过 \r\n\ 这3个字符
+        		}
+    		} else {
+        		body += 4; // 跳过 \r\n\r\n 这4个字符
+    		}
+
+    		if (!body) {
+        		// 如果依然找不到，尝试查找 \n\n（极端情况下，可能只有两个 \n）
+        		body = strstr(result, "\n\n");
+        		if (body) {
+            			body += 2; // 跳过 \n\n 这2个字符
+        		}
+    		}
+		if (!body) {
+        		body = strstr(result, "\r\n");
+        		if (body) {
+            			body += 2; // 跳过 \r\n 这2个字符
+        		}
+    		}
+		if (!body) {
+        		body = find_last_line_or_all(result);
+    		}
+
+    		if (body) {
+        		// 将正文内容去掉所有换行符，存入 clean_addr
+        		char clean_addr[512] = {0};
+        		int j = 0;
+        		for (int i = 0; body[i] != '\0' && j < sizeof(clean_addr) - 1; i++) {
+            			if (body[i] != '\r' && body[i] != '\n') {
+                			clean_addr[j++] = body[i];
+            			}
+        		}
+			clean_addr[sizeof(clean_addr) - 1] = '\0'; 
+        		// 更新 addr 变量
+        		safe_strncpy(addr, clean_addr, sizeof(addr));
+
+        		// 去掉 http:// 或 https:// 前缀
+        		strip_http_prefix(addr);
+        		// 打印成功日志
+        		// traceEvent(TRACE_NORMAL, "HTTP 200 Use the webpage body as the address: %s", addr);
+    		} else {
+        		// 如果找不到正文，打印错误日志
+        		traceEvent(TRACE_ERROR, "No HTTP body content found");
+        		return -1;
+    		}
+	} else {
+   		 // 其他状态码
+    		traceEvent(TRACE_ERROR, "Unexpected status code: %d", status_code);
+    		return -1;
+	}
+  }
+	
   supernode_host = strtok(addr, ":");
 
   if(supernode_host) {
@@ -337,7 +646,7 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
     const struct addrinfo aihints = {0, PF_INET, 0, 0, 0, NULL, NULL, NULL};
     struct addrinfo * ainfo = NULL;
     int nameerr;
-
+    traceEvent(TRACE_NORMAL, "Server address: %s:%s", supernode_host, supernode_port);  
     if(supernode_port)
       sn->port = atoi(supernode_port);
     else
@@ -345,17 +654,14 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
 		 addr, supernode_host, supernode_port);
 
     nameerr = getaddrinfo(supernode_host, NULL, &aihints, &ainfo);
-
     if(0 == nameerr)
       {
 	struct sockaddr_in * saddr;
-
 	/* ainfo s the head of a linked list if non-NULL. */
 	if(ainfo && (PF_INET == ainfo->ai_family))
 	  {
 	    /* It is definitely and IPv4 address -> sockaddr_in */
 	    saddr = (struct sockaddr_in *)ainfo->ai_addr;
-
 	    memcpy(sn->addr.v4, &(saddr->sin_addr.s_addr), IPV4_SIZE);
 	    sn->family=AF_INET;
 	  }
@@ -365,7 +671,6 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
 	    traceEvent(TRACE_WARNING, "Failed to resolve supernode IPv4 address for %s", supernode_host);
 	    rv = -1;
 	  }
-
 	freeaddrinfo(ainfo); /* free everything allocated by getaddrinfo(). */
 	ainfo = NULL;
       } else {
@@ -377,7 +682,6 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
     traceEvent(TRACE_WARNING, "Wrong supernode parameter (-l <host:port>)");
     rv = -3;
   }
-
   return(rv);
 }
 
@@ -3135,7 +3439,7 @@ void edge_init_conf_defaults(n2n_edge_conf_t *conf) {
 
 	if (getenv("N2N_KEY")) {
 		conf->encrypt_key = strdup(getenv("N2N_KEY"));
-		
+		conf->transop_id = N2N_TRANSFORM_ID_TWOFISH;
 	}
 }
 
@@ -3180,7 +3484,7 @@ int quick_edge_init(char *device_name, char *community_name,
   /* Setup the configuration */
   edge_init_conf_defaults(&conf);
   conf.encrypt_key = encrypt_key;
-
+  conf.transop_id = N2N_TRANSFORM_ID_TWOFISH;
   conf.compression = N2N_COMPRESSION_ID_NONE;
   snprintf((char*)conf.community_name, sizeof(conf.community_name), "%s", community_name);
   edge_conf_add_supernode(&conf, supernode_ip_address_port);
