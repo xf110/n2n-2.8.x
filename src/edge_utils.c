@@ -16,13 +16,8 @@
  *
  */
 #include <regex.h> 
-#include <ares.h>    // 引入 c-ares 头文件解析txt记录
 #include "n2n.h"
 #include "edge_utils_win32.h"
-
-// 定义常量，模拟从 ares.h 中引入的常量
-#define ns_c_in 1     // IN class (Internet)
-#define ns_t_txt 16   // TXT record type
 
 /* heap allocation for compression as per lzo example doc */
 #define HEAP_ALLOC(var,size) lzo_align_t __LZO_MMODEL var [ ((size) + (sizeof(lzo_align_t) - 1)) / sizeof(lzo_align_t) ]
@@ -395,96 +390,7 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
   int rv = 0;
 
   memcpy(addr, addrIn, N2N_EDGE_SN_HOST_SIZE);
-  // 检查地址是否以 "txt:" 开头，如果是，则进行TXT记录解析
-    if (strncmp(addr, "txt:", 4) == 0) {
-        // 只处理txt查询
-        const char *domain = addr + 4; // 跳过 "txt:" 获取真正的域名
-        ares_channel channel;
-        struct ares_options options;
-        int optmask = 0;
-        int status;
-
-        // 初始化c-ares库
-        if ((status = ares_library_init(ARES_LIB_INIT_ALL)) != ARES_SUCCESS) {
-            traceEvent(TRACE_ERROR, "Failed to initialize c-ares: %d", status);
-            return -1;
-        }
-
-        // 初始化c-ares通道
-        if ((status = ares_init_options(&channel, &options, optmask)) != ARES_SUCCESS) {
-            traceEvent(TRACE_ERROR, "Failed to initialize c-ares channel: %d", status);
-            ares_library_cleanup();
-            return -1;
-        }
-
-        // 设置DNS服务器，这里使用公共DNS服务器（腾讯和114和谷歌）
-        const char *servers = "119.29.29.29,114.114.114.114,8.8.8.8";
-        ares_set_servers_csv(channel, servers);
-
-        // 定义查询上下文
-        struct {
-            int done;             // 是否完成标志
-            int success;          // 是否成功标志
-            char txt_record[256]; // 查询到的TXT记录
-        } ctx = {0};
-
-        // 定义TXT查询回调
-        void txt_query_callback(void *arg, int status, int timeouts, unsigned char *abuf, int alen) {
-            if (status == ARES_SUCCESS) {
-                struct ares_txt_reply *txt_out = NULL;
-                if (ares_parse_txt_reply(abuf, alen, &txt_out) == ARES_SUCCESS && txt_out != NULL) {
-                    snprintf(ctx.txt_record, sizeof(ctx.txt_record), "%s", txt_out->txt);
-                    ctx.success = 1; // 成功解析
-                    ares_free_data(txt_out); // 释放返回的数据
-                }
-            }
-            ctx.done = 1; // 查询完成
-        }
-
-        // 发起TXT查询
-        ares_query(channel, domain, ns_c_in, ns_t_txt, txt_query_callback, &ctx);
-        // traceEvent(TRACE_NORMAL, "Initiate TXT query: '%s'", domain);
-
-        // 查询等待处理（select驱动）
-        fd_set read_fds, write_fds;
-        struct timeval *tvp, tv, timeout;
-        int nfds;
-        int max_wait_ms = 3000; // 最大等待3秒
-
-        timeout.tv_sec = max_wait_ms / 1000;
-        timeout.tv_usec = (max_wait_ms % 1000) * 1000;
-
-        while (!ctx.done) {
-            FD_ZERO(&read_fds);
-            FD_ZERO(&write_fds);
-            nfds = ares_fds(channel, &read_fds, &write_fds);
-            if (nfds == 0) {
-                break; // 没有事件可处理
-            }
-
-            tvp = ares_timeout(channel, &timeout, &tv);
-            int res = select(nfds, &read_fds, &write_fds, NULL, tvp);
-            if (res < 0) {
-                traceEvent(TRACE_ERROR, "Select failed, terminating TXT query");
-                break;
-            }
-            ares_process(channel, &read_fds, &write_fds);
-        }
-
-        // 清理c-ares资源
-        ares_destroy(channel);
-        ares_library_cleanup();
-
-        if (ctx.success) {
-            // 成功解析到TXT记录，把结果拷贝回addr
-            snprintf(addr, sizeof(addr), "%s", ctx.txt_record);
-            // traceEvent(TRACE_NORMAL, "TXT record query successful, the address is: %s", addr);
-        } else {
-            // 查询失败，返回错误
-            traceEvent(TRACE_ERROR, "TXT record query failed");
-            return -1;
-        }
-    }
+  
   // 检查是否以 http 或 https 开头
  if (strncmp(addr, "http:", 5) == 0 || strncmp(addr, "https:", 6) == 0) {
  	char result[8192] = {0};
