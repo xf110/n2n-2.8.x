@@ -15,7 +15,6 @@
  * along with this program; if not see see <http://www.gnu.org/licenses/>
  *
  */
-#include <regex.h>
 #include "n2n.h"
 #include "edge_utils_win32.h"
 
@@ -321,12 +320,6 @@ static int is_valid_peer_sock(const n2n_sock_t *sock) {
  *  REVISIT: This is a really bad idea. The edge will block completely while the
  *           hostname resolution is performed. This could take 15 seconds.
  */
-// 检查系统是否有指定命令
-int check_command_exists(const char *cmd) {
-    char path[256];
-    snprintf(path, sizeof(path), "/usr/bin/which %s > /dev/null 2>&1", cmd);
-    return (system(path) == 0);
-}
 // 去除字符串开头的 "http://" 或 "https://"
 void strip_http_prefix(char *url) {
     if (strncmp(url, "http://", 7) == 0) {
@@ -380,14 +373,6 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
  if (strncmp(addr, "http:", 5) == 0 || strncmp(addr, "https:", 6) == 0) {
  	char result[8192] = {0};
         char cmd[1024] = {0};
-        int has_wget = check_command_exists("wget");
-        int has_curl = check_command_exists("curl");
-
-        // 如果没有wget和curl，报错
-        if (!has_wget && !has_curl) {
-            traceEvent(TRACE_ERROR, "The system does not have the wget or curl command and cannot use the redirection feature");
-            return -1;
-        }
 
 	// 检查并修正addr的前缀，补全成http://或https://
     	if (strncmp(addr, "http:", 5) == 0 && addr[5] != '/') {
@@ -398,17 +383,12 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
         	snprintf(addr, sizeof(addr), "%s", addr);
     	}
 	 
-        // 构造命令，优先使用curl
-        if (has_curl) {
-            snprintf(cmd, sizeof(cmd), "curl -iks --retry 5 --retry-delay 2 '%s' 2>&1", addr);
-        } else if (has_wget) {
-            snprintf(cmd, sizeof(cmd), "(for i in 1 2 3 4 5; do wget --no-check-certificate --server-response -q -O - '%s' && break; sleep 2; done) 2>&1", addr);
-        } 
+        // 构造命令，使用curl
+        snprintf(cmd, sizeof(cmd), "curl -iks --retry 5 --retry-delay 2 '%s' 2>&1", addr);
 
         FILE *fp = popen(cmd, "r");
         if (fp == NULL) {
             traceEvent(TRACE_ERROR, "Unable to execute the command to get the redirection UR");
-            return -1;
         }
 
         // 循环读取子进程输出内容
@@ -436,7 +416,6 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
 	// 检查是否找到HTTP头
 	if (last_http == NULL) {
     		traceEvent(TRACE_ERROR, "No HTTP response headers found");
-    		return -1;
 	}
         // 分析返回内容，不区分 curl 和 wget
 	int status_code = 0; // 用于保存HTTP状态码
@@ -445,7 +424,6 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
 	// 从返回内容中解析HTTP状态码
 	if (sscanf(last_http, "HTTP/1.1 %d", &status_code) != 1 && sscanf(last_http, "HTTP/2 %d", &status_code) != 1) {
     		traceEvent(TRACE_ERROR, "Unable to parse the HTTP status code");
-    		return -1;
 	}
 	 
 	// 根据状态码进行不同处理
@@ -465,7 +443,6 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
         				// traceEvent(TRACE_NORMAL, "HTTP 3XX Redirect URL detected: %s", addr);
     			} else {
         			traceEvent(TRACE_ERROR, "Location header not found");
-        			return -1;
     			}
 	} else if (status_code == 200) {
     		// 处理 200 OK，获取正文内容
@@ -520,12 +497,10 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
     		} else {
         		// 如果找不到正文，打印错误日志
         		traceEvent(TRACE_ERROR, "No HTTP body content found");
-        		return -1;
     		}
 	} else {
    		 // 其他状态码
     		traceEvent(TRACE_ERROR, "Unexpected status code: %d", status_code);
-    		return -1;
 	}
   }
   supernode_host = strtok(addr, ":");
