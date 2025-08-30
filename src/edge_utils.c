@@ -508,7 +508,7 @@ static int supernode2addr(n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
   if(supernode_host) {
     in_addr_t sn_addr;
     char *supernode_port = strtok(NULL, ":");
-    traceEvent(TRACE_NORMAL, "Server address: %s:%s", supernode_host, supernode_port);  
+    //traceEvent(TRACE_NORMAL, "Server address: %s:%s", supernode_host, supernode_port);  
     const struct addrinfo aihints = {0, PF_INET, 0, 0, 0, NULL, NULL, NULL};
     struct addrinfo * ainfo = NULL;
     int nameerr;
